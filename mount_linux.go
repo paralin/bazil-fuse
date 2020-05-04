@@ -55,6 +55,19 @@ func isBoringFusermountError(err error) bool {
 	return false
 }
 
+func determineFusermountBinaryName() (string, error) {
+	binName := "fusermount"
+	cmd := exec.Command(binName, "--version")
+	_, err := cmd.CombinedOutput()
+	if err != nil && strings.Contains(err.Error(), "executable file not found") {
+		// newer systems have a binary named fusermount3
+		binName = "fusermount3"
+		cmd = exec.Command(binName, "--version")
+		_, err = cmd.CombinedOutput()
+	}
+	return binName, err
+}
+
 func mount(dir string, conf *mountConfig) (fusefd *os.File, err error) {
 	fds, err := syscall.Socketpair(syscall.AF_FILE, syscall.SOCK_STREAM, 0)
 	if err != nil {
@@ -67,14 +80,18 @@ func mount(dir string, conf *mountConfig) (fusefd *os.File, err error) {
 	readFile := os.NewFile(uintptr(fds[1]), "fusermount-parent-reads")
 	defer readFile.Close()
 
+	binName, err := determineFusermountBinaryName()
+	if err != nil {
+		return nil, fmt.Errorf("setting up fusermount: %v", err)
+	}
+
 	cmd := exec.Command(
-		"fusermount",
+		binName,
 		"-o", conf.getOptions(),
 		"--",
 		dir,
 	)
 	cmd.Env = append(os.Environ(), "_FUSE_COMMFD=3")
-
 	cmd.ExtraFiles = []*os.File{writeFile}
 
 	var wg sync.WaitGroup

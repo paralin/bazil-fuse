@@ -4,11 +4,17 @@ import (
 	"bytes"
 	"errors"
 	"os/exec"
+	"strings"
 )
 
 func unmount(dir string) error {
 	cmd := exec.Command("fusermount", "-u", dir)
 	output, err := cmd.CombinedOutput()
+	if err != nil && strings.Contains(err.Error(), "executable file not found") {
+		// newer systems have a binary named fusermount3
+		cmd = exec.Command("fusermount3", "-u", dir)
+		output, err = cmd.CombinedOutput()
+	}
 	if err != nil {
 		if len(output) > 0 {
 			output = bytes.TrimRight(output, "\n")
